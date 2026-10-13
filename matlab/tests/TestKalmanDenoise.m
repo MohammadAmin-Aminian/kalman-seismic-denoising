@@ -153,8 +153,9 @@ classdef TestKalmanDenoise < matlab.unittest.TestCase
             S0 = S(:, numel(k) / 2 + 1);
             % compare above -100 dB only: below that level the values are set by
             % floating-point rounding, which differs between FFT libraries
-            ok = tc.Ref.fk_S_col_k0(:) > -100;
-            tc.verifyLessThan(max(abs(S0(ok) - tc.Ref.fk_S_col_k0(ok))), 1e-6);
+            R0 = tc.Ref.fk_S_col_k0(:);              % column, same shape as S0
+            ok = R0 > -100;
+            tc.verifyLessThan(max(abs(S0(ok) - R0(ok))), 1e-6);
         end
 
         function paritySweep(tc)
