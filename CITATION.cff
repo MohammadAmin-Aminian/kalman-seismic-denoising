@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "Kalman-filter denoising of seismic data (Python and MATLAB)"
+abstract: >-
+  Random-noise attenuation of seismic traces with a scalar random-walk Kalman
+  filter, compared with Savitzky-Golay, f-x deconvolution and SVD filtering.
+  Python and MATLAB implementations with shared configuration, data, tests
+  and figure-reproduction scripts.
+authors:
+  - family-names: Aminian
+    given-names: Mohammad-Amin
+version: 1.0.0
+date-released: "2026-10-13"
+license: MIT
+repository-code: "https://github.com/MohammadAmin-Aminian/kalman-seismic-denoising"
+keywords:
+  - seismic
+  - Kalman filter
+  - denoising
+  - random noise attenuation
+  - signal processing

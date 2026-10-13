@@ -1,0 +1,63 @@
+{
+  "_comment": "Single configuration shared by the Python and MATLAB implementations. Units: seconds, metres, Hz.",
+  "synthetic": {
+    "dt_s": 0.002,
+    "tmax_s": 3.0,
+    "f0_hz": 20.0,
+    "offset_start_m": 20.0,
+    "offset_stop_m": 1000.0,
+    "offset_step_m": 20.0,
+    "mirror": true,
+    "tau_s": [0.5, 0.9, 1.5, 1.7, 2.0],
+    "v_mps": [800.0, 1200.0, 1600.0, 2000.0, 3000.0],
+    "amp": [3.0, 3.0, 3.0, 3.0, 3.0]
+  },
+  "noise": {
+    "file": "data/synthetic_noise.mat",
+    "sigma_main": 0.04,
+    "sigma_levels": [0.04, 0.4]
+  },
+  "kalman": {
+    "Q": 0.004,
+    "R": 0.05,
+    "P0": 1.01,
+    "x0": 0.0
+  },
+  "savgol": {
+    "order": 4,
+    "frame": 27
+  },
+  "fx": {
+    "operator_length": 8,
+    "mu_percent": 0.0,
+    "fmin_hz": 0.0,
+    "fmax_hz": 100.0
+  },
+  "svd": {
+    "rank": 18
+  },
+  "display": {
+    "trace_index": 50,
+    "fmax_hz": 125.0
+  },
+  "sweep": {
+    "log10_Q_min": -5.0,
+    "log10_Q_max": 1.0,
+    "n": 25
+  },
+  "chirp": {
+    "dt_s": 0.002,
+    "duration_s": 4.0,
+    "f_start_hz": 1.0,
+    "f_end_hz": 120.0,
+    "sigma": 0.4,
+    "noise_file": "data/chirp_noise.mat"
+  },
+  "earthquake": {
+    "file": "data/earthquake_IU_DAV_BHZ.mat",
+    "Q": 5e-05,
+    "Q_alt": 0.005,
+    "R": 0.05,
+    "fmax_hz": 5.0
+  }
+}

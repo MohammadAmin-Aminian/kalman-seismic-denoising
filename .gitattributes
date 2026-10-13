@@ -1,0 +1,4 @@
+*.mat binary
+*.png binary
+*.m text eol=lf
+*.py text eol=lf

@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  python:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[test]"
+      - name: Unit tests
+        run: pytest -v
+      - name: Reproduce all numbers and figures
+        run: python scripts/reproduce_all.py --out "$RUNNER_TEMP/repro"
+      - name: Check that published numbers are unchanged
+        run: |
+          python - <<'PY'
+          import json, os
+          a = json.load(open("results/metrics.json"))["synthetic_snr_db"]
+          b = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "repro", "results", "metrics.json")))["synthetic_snr_db"]
+          for s in a:
+              for m in a[s]:
+                  assert abs(a[s][m] - b[s][m]) < 1e-6, (s, m, a[s][m], b[s][m])
+          print("published SNR table reproduced")
+          PY
+      - name: Upload figures
+        if: matrix.python-version == '3.11'
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-figures
+          path: ${{ runner.temp }}/repro/figures
+
+  matlab:
+    name: MATLAB
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: matlab-actions/setup-matlab@v2
+        with:
+          release: R2023b
+      - name: Unit and parity tests
+        uses: matlab-actions/run-tests@v2
+        with:
+          source-folder: matlab/src
+          select-by-folder: matlab/tests
+          test-results-junit: test-results/matlab.xml
+      - name: Reproduce all numbers and figures
+        uses: matlab-actions/run-command@v2
+        with:
+          command: cd matlab; reproduce_all('outdir', fullfile(getenv('RUNNER_TEMP'), 'repro'));
+      - name: Upload figures and numbers
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: matlab-outputs
+          path: |
+            ${{ runner.temp }}/repro
+            test-results
