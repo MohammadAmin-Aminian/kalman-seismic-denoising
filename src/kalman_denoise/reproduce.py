@@ -24,7 +24,8 @@ def _table(rows, sigmas):
     return "\n".join(lines)
 
 
-def main(argv=None):
+def run(argv=None):
+    """Run everything and return the metrics dictionary."""
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--config", default=None)
     ap.add_argument("--no-figures", action="store_true")
@@ -88,5 +89,11 @@ def main(argv=None):
     return metrics
 
 
+def main(argv=None):
+    """Command-line entry point (exit status 0 on success)."""
+    run(argv)
+    return 0
+
+
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
