@@ -56,6 +56,16 @@ change from the original scripts is listed in
   * The original setting Q = 5·10⁻⁵ is a 0.20 Hz low-pass. It keeps only 43%
     of the RMS amplitude and removes most of the body-wave energy.
   * Q = 0.005 (a 2.0 Hz low-pass) keeps 92%.
+* **Shot gathers** (the two SEG-Y files of the original project, Figs. 11–13):
+  * *Modelled shot with ground roll* (2 ms), with Gaussian noise added at
+    0 dB input SNR. Output SNR in dB: Savitzky–Golay 3.76, f-x 1.20, SVD 1.35,
+    **Kalman 3.12** (Q = 0.005, the original setting), Kalman RTS 4.28.
+    With the best Q, Kalman reaches 3.60 and RTS 5.31.
+  * *Field record* (FFID 3043, 4 ms, 447 traces) has no ground truth.
+    * With Q = 0.005 at 4 ms sampling the filter is a 12.6 Hz low-pass. It
+      removes 57% of the energy, including reflection energy above about
+      15 Hz (Fig. 12, bottom row).
+    * f-x removes 64% and Savitzky–Golay 86%.
 
 ## Method
 
@@ -98,11 +108,14 @@ linear, so scaling the data doesn't change K.
 | **Fig. 7** Output SNR against Q. The original Q = 0.004 is far below the optimum at σ = 0.04. | **Fig. 8** Frequency response of the steady-state filter compared with the 20 Hz Ricker spectrum. |
 | ![chirp](figures/fig09_chirp_validation.png) | ![earthquake](figures/fig10_earthquake.png) |
 | **Fig. 9** Known-answer test: the gain measured on a chirp matches the theoretical H(f) to within 0.032. | **Fig. 10** Earthquake record with Q = 0.005 and Q = 5·10⁻⁵ (dashed lines: −3 dB cut-offs). |
+| ![modelled](figures/fig11_modelled_shot.png) | ![field](figures/fig12_field_record.png) |
+| **Fig. 11** Modelled shot with ground roll plus noise (0 dB). Bottom row: error against the noise-free gather. | **Fig. 12** Field record FFID 3043 after AGC. Bottom row: energy removed by each method. |
 
 All figures are in [`figures/`](figures): gathers (1), method comparison at
 both noise levels (2–3), trace comparison (4), amplitude spectra (5), f-k
-spectra (6), Q sweep (7), filter response (8), chirp validation (9) and
-earthquake (10). MATLAB writes the same set to `figures/matlab/`.
+spectra (6), Q sweep (7), filter response (8), chirp validation (9),
+earthquake (10), modelled shot (11), field record (12) and field spectra (13).
+MATLAB writes the same set to `figures/matlab/`.
 
 ## Installation
 
@@ -125,7 +138,7 @@ installation step.
 ```bash
 python scripts/reproduce_all.py          # all numbers -> results/, all figures -> figures/
 python scripts/reproduce_all.py --no-figures
-pytest                                   # 19 tests
+pytest                                   # 23 tests
 python tools/original_port.py            # comparison with the original code
 ```
 
@@ -140,7 +153,7 @@ print(steady_state(0.004, 0.05)["K"])         # 0.2457
 ```matlab
 cd matlab
 reproduce_all                  % numbers -> results/*_matlab.*, figures -> figures/matlab/
-results = runtests('tests');   % 18 tests, incl. parity with Python
+results = runtests('tests');   % 22 tests, incl. parity with Python
 ```
 
 ```matlab
@@ -149,7 +162,7 @@ x = kalman1d(noisy, 0.004, 0.05);
 ```
 
 The Python run takes about 20 s and writes `results/metrics.json`,
-`results/snr_table.md` and `figures/fig01…fig10`.
+`results/snr_table.md` and `figures/fig01…fig13`.
 
 ## Configuration
 
@@ -167,6 +180,8 @@ seconds, metres and Hz.
 | `sweep` | log₁₀ Q range and number of points | −5 … 1, 25 |
 | `chirp` | sampling, duration, start/end frequency, σ | 2 ms, 4 s, 1–120 Hz, 0.4 |
 | `earthquake` | file, Q, alternative Q, R | 5·10⁻⁵, 0.005, 0.05 |
+| `modelled` | file, AGC window, noise (× RMS), Kalman Q, f-x settings | 0.2 s, 1.0, 0.005, 8 / 0 % / 0–100 Hz |
+| `field` | file, AGC window, Kalman Q, f-x settings | 0.4 s, 0.005, 15 / 0.01 % / 1–120 Hz |
 
 Pass another file with `--config my.json` (Python) or
 `reproduce_all('config', 'my.json')` (MATLAB).
@@ -175,12 +190,13 @@ Pass another file with `--config my.json` (Python) or
 
 ```
 config/default.json          shared parameters
-data/                        noise fields + earthquake record (.mat v5) - see data/README.md
+data/                        noise fields, earthquake record, modelled shot, field record (.mat v5) - see data/README.md
 src/kalman_denoise/          Python package
   kalman.py                  kalman1d, kalman_rts, steady_state, ewma_response, cutoff_frequency
   baselines.py               savgol_filter, fx_decon, svd_denoise
   synthetic.py               ricker, hyperbolic_gather, chirp_signal
   spectra.py, metrics.py     amplitude/f-k spectra, SNR
+  preprocessing.py           agc
   pipeline.py, reproduce.py  experiments and figure/number generation
   plotting.py
 matlab/
@@ -189,7 +205,7 @@ matlab/
   tests/TestKalmanDenoise.m  unit, known-answer and Python-parity tests
 scripts/reproduce_all.py     Python entry point
 tests/                       pytest suite + reference outputs for MATLAB parity
-tools/                       make_data.py, make_reference.py, original_port.py
+tools/                       make_data.py (incl. SEG-Y conversion via segy.py), make_reference.py, original_port.py
 results/                     metrics.json, snr_table.md, original_comparison.md
 figures/                     PNG figures (Python); figures/matlab/ (MATLAB)
 docs/CORRECTIONS.md          every correction relative to the original code
@@ -214,8 +230,9 @@ legacy/                      original 2021 scripts (reference only)
 * **Python ↔ MATLAB parity:**
   * The MATLAB tests compare against `tests/reference/python_reference.mat`:
     the Kalman filter and smoother on the chirp, the gather, all method
-    outputs, the SNR tables, the Q sweep, the spectra and the earthquake
-    numbers.
+    outputs, the SNR tables, the Q sweep, the spectra, the earthquake
+    numbers, the AGC and every method's output on the modelled shot and the
+    field record.
   * Tolerances are 10⁻¹² for the Kalman recursions, 10⁻⁸ (relative) for the
     other method outputs and 10⁻⁶ dB for the SNRs.
 * **Against the original code** ([`results/original_comparison.md`](results/original_comparison.md)):
@@ -258,6 +275,13 @@ important ones:
    shared by both languages.
 9. **Chirp test:** the aliased chirp (and uniform noise labelled
    "Gaussian") was rebuilt as a proper known-answer test.
+10. **Shot data:**
+    * The modelled SEG-Y file declares IBM floats, but its samples are
+      little-endian IEEE. It is now decoded correctly.
+    * The original scripts' third-party AGC and SEG-Y readers were replaced
+      by documented implementations.
+    * The real-data f-k/f-x calls used dt = 1 ms for 2 ms and 4 ms data. Each
+      dataset now uses its own sampling interval.
 
 ## Limitations
 
@@ -272,14 +296,17 @@ important ones:
   * The best Q depends strongly on the noise level (Fig. 7), and no rule for
     choosing it is given.
 * **Real data:**
-  * The real shot gathers (`shot1.sgy`, `shot20.sgy`) were not available, so
-    the real-data experiments of the original project are not reproduced.
-  * The earthquake record has no ground truth. It is only characterised, not
-    scored.
+  * The field record and the earthquake record have no ground truth. They
+    are characterised (removed energy, spectra), not scored.
+  * The AGC used by the original scripts (`agc(data,100,1,0)`, third-party)
+    is not available. It is replaced by a centred RMS AGC with a 100-sample
+    window, which is an assumption.
 * **Unreproduced material:**
   * `VRE` ("Kalman + VRE") could not be reproduced (function missing).
-  * Some original figures (a 121-trace gather with "Trace 57") have no
-    matching script or data and are not reproduced.
+  * The original "Trace 57" figures come from the modelled file (120-trace
+    shots, 1000 samples). The script that made them, and how it added noise,
+    are unknown, so those exact panels are not reproduced. Fig. 11 uses the
+    same data with a documented noise level.
 * **f-x deconvolution:** applied without spatial windows, as in the
   original. It is therefore at a disadvantage on curved events. It works as
   expected on plane waves (unit test).

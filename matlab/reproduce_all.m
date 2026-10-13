@@ -36,6 +36,8 @@ end
 sw = run_sweep(cfg);
 ch = run_chirp(cfg);
 eq = run_earthquake(cfg);
+mo = run_modelled(cfg);
+fd = run_field(cfg);
 
 % ---------------------------------------------------------------- numbers
 snrTable = zeros(numel(sig), 6);
@@ -57,6 +59,13 @@ results.sweep = struct('Q', sw.Q, 'forward', sw.forward, 'rts', sw.rts, ...
 results.chirp = struct('K', ch.K, 'f3db_hz', ch.f3db_hz, 'max_gain_error', ch.max_gain_error);
 results.earthquake = struct( ...
     'main', rmfield(eq.main, 'y'), 'alt', rmfield(eq.alt, 'y'));
+[mbF, miF] = max(mo.sweep_forward);
+[mbR, miR] = max(mo.sweep_rts);
+results.modelled_shot = struct('sigma_x_rms', mo.sigma, 'Q', mo.Q, 'snr_db', mo.snr, ...
+    'best_forward_Q', mo.sweep_Q(miF), 'best_forward_snr_db', mbF, ...
+    'best_rts_Q', mo.sweep_Q(miR), 'best_rts_snr_db', mbR);
+results.field_record = struct('Q', fd.Q, 'K', fd.K, 'f3db_hz', fd.f3db_hz, ...
+    'removed_energy_fraction', fd.removed);
 
 fid = fopen(fullfile(resDir, 'metrics_matlab.json'), 'w');
 fprintf(fid, '%s\n', jsonencode(results));
@@ -72,6 +81,18 @@ for i = 1:numel(rows)
     fprintf(fid, '| %s |', rows{i});
     fprintf(fid, ' %.2f |', vals(:, i));
     fprintf(fid, '\n');
+end
+fprintf(fid, '\n## Modelled shot gather (noise sigma = %g x RMS, Kalman Q = %g)\n\n', mo.sigma, mo.Q);
+fprintf(fid, '| Method | Output SNR (dB) |\n|---|---:|\n');
+mrows = [{'Input (noisy)'}, names, {'Kalman, best Q (sweep)', 'Kalman RTS, best Q (sweep)'}];
+mvals = [mo.snr, mbF, mbR];
+for i = 1:numel(mrows)
+    fprintf(fid, '| %s | %.2f |\n', mrows{i}, mvals(i));
+end
+fprintf(fid, '\n## Field record FFID 3043 (no ground truth; Kalman Q = %g)\n\n', fd.Q);
+fprintf(fid, '| Method | Energy removed |\n|---|---:|\n');
+for i = 1:5
+    fprintf(fid, '| %s | %.0f %% |\n', names{i}, 100 * fd.removed(i));
 end
 fclose(fid);
 type(fullfile(resDir, 'snr_table_matlab.md'));
@@ -91,8 +112,9 @@ gray_r = flipud(gray(256));
 
 % fig01 gathers
 f = newfig(9, 4.2);
-panels = {lo.clean, '(a) Clean'; lo.noisy, sprintf('(b) Noisy, \\sigma = %g (SNR %.1f dB)', lo.sigma, lo.snr(1)); ...
-          hi.noisy, sprintf('(c) Noisy, \\sigma = %g (SNR %.1f dB)', hi.sigma, hi.snr(1))};
+panels = {lo.clean, {'(a) Clean', ''}; ...
+          lo.noisy, {sprintf('(b) Noisy, \\sigma = %g', lo.sigma), sprintf('SNR %.1f dB', lo.snr(1))}; ...
+          hi.noisy, {sprintf('(c) Noisy, \\sigma = %g', hi.sigma), sprintf('SNR %.1f dB', hi.snr(1))}};
 for i = 1:3
     subplot(1, 3, i);
     gatherImage(panels{i, 1}, lo.t, lo.h, clip, gray_r);
@@ -113,7 +135,7 @@ for q = 1:2
         if i == 1, ylabel('Time (s)'); end
         subplot(2, 5, 5 + i);
         gatherImage(r.noisy - r.out{i}, r.t, r.h, clip, gray_r);
-        title('removed (noisy - output)');
+        title('Removed', 'FontWeight', 'normal');
         if i == 1, ylabel('Time (s)'); end
     end
     save_png(f, fullfile(figDir, pairs{q, 2}));
@@ -172,11 +194,12 @@ for s = 1:numel(sig)
     semilogx(sw.Q, sw.rts(s, :), '-s', 'Color', C.rts, 'MarkerSize', 3, 'MarkerFaceColor', C.rts);
     semilogx(sw.Q([1 end]), sw.input(s) * [1 1], '--', 'Color', C.muted);
     yl = ylim; semilogx(cfg.kalman.Q * [1 1], yl, '-', 'Color', [.76 .76 .72]); ylim(yl);
+    xlim([sw.Q(1) sw.Q(end)]);
     xlabel('Process-noise variance Q (R = 0.05)'); ylabel('Output SNR (dB)');
     title(sprintf('\\sigma = %g', sig(s))); box off
     if s == 1
         legend({'Kalman (forward)', 'Kalman RTS', 'Input (no filtering)', 'Q = 0.004 (original)'}, ...
-               'Location', 'west', 'Box', 'off');
+               'Location', 'southeast', 'Box', 'off');
     end
 end
 save_png(f, fullfile(figDir, 'fig07_snr_vs_Q.png'));
@@ -257,6 +280,61 @@ xlim([1e-2 0.5 / eq.dt]); box off
 xlabel('Frequency (Hz)  (dashed: -3 dB cut-off of each filter)'); ylabel('Amplitude');
 legend(sigs(:, 3), 'Location', 'southwest', 'Box', 'off');
 save_png(f, fullfile(figDir, 'fig10_earthquake.png'));
+% fig11 modelled shot gather
+f = newfig(14, 6.6);
+mpan = [{mo.clean, {'Clean (AGC)', ''}}; {mo.noisy, {'Noisy', sprintf('SNR %.1f dB', mo.snr(1))}}];
+for i = 1:5
+    mpan(end + 1, :) = {mo.out{i}, {names{i}, sprintf('SNR %.1f dB', mo.snr(i + 1))}}; %#ok<AGROW>
+end
+for j = 1:size(mpan, 1)
+    subplot(2, 7, j);
+    gatherImage(mpan{j, 1}, mo.t, mo.h, 2.5, gray_r);
+    title(mpan{j, 2});
+    if j == 1, ylabel('Time (s)'); end
+    if j > 1
+        subplot(2, 7, 7 + j);
+        gatherImage(mpan{j, 1} - mo.clean, mo.t, mo.h, 2.5, gray_r);
+        title('output - clean', 'FontWeight', 'normal');
+        if j == 2, ylabel('Time (s)'); end
+    end
+end
+save_png(f, fullfile(figDir, 'fig11_modelled_shot.png'));
+
+% fig12 field record
+f = newfig(11.5, 6.6);
+order = [4 5 2 1];
+selT = fd.t <= 2;
+subplot(2, 5, 1);
+gatherImage(fd.x(selT, :), fd.t(selT), fd.h, 2.5, gray_r);
+title({'Field record (AGC)', sprintf('Kalman: -3 dB at %.1f Hz', fd.f3db_hz)}); ylabel('Time (s)');
+for j = 1:4
+    i = order(j);
+    subplot(2, 5, 1 + j);
+    gatherImage(fd.out{i}(selT, :), fd.t(selT), fd.h, 2.5, gray_r);
+    title(names{i});
+    subplot(2, 5, 6 + j);
+    gatherImage(fd.x(selT, :) - fd.out{i}(selT, :), fd.t(selT), fd.h, 2.5, gray_r);
+    title(sprintf('removed %.0f%% of energy', 100 * fd.removed(i)), 'FontWeight', 'normal');
+    if j == 1, ylabel('Time (s)'); end
+end
+save_png(f, fullfile(figDir, 'fig12_field_record.png'));
+
+% fig13 field spectra
+f = newfig(6.5, 3.8);
+[fr, A] = amplitude_spectrum(fd.x, fd.dt);
+semilogy(fr, A, 'Color', C.muted, 'LineWidth', 1.4); hold on
+for i = order
+    [fr, A] = amplitude_spectrum(fd.out{i}, fd.dt);
+    semilogy(fr, A, 'Color', mcol{i}, 'LineWidth', 1.1);
+end
+yl = ylim;
+semilogy(fd.f3db_hz * [1 1], yl, '--', 'Color', C.kal); ylim(yl);
+xlim([0 0.5 / fd.dt]); box off
+xlabel('Frequency (Hz)'); ylabel('Mean amplitude spectrum');
+title(sprintf('Field record spectra (dashed: Kalman -3 dB at %.1f Hz)', fd.f3db_hz));
+legend([{'Field record (AGC)'}, names(order)], 'Location', 'southwest', 'Box', 'off', 'NumColumns', 2);
+save_png(f, fullfile(figDir, 'fig13_field_spectra.png'));
+
 fprintf('figures written to %s\n', figDir);
 end
 

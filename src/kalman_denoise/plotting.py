@@ -234,3 +234,76 @@ def fig_earthquake(eq, fmax, path):
     ax2.legend(fontsize=8, loc="lower left")
     fig.savefig(path)
     plt.close(fig)
+
+
+def _gather_km(ax, d, t, h, clip, title):
+    ax.imshow(d, cmap="gray_r", vmin=-clip, vmax=clip, aspect="auto",
+              extent=[h[0] / 1000, h[-1] / 1000, t[-1], t[0]], interpolation="bilinear")
+    ax.set_title(title)
+    ax.set_xlabel("Offset (km)")
+
+
+def fig_modelled(mo, path):
+    t, h = mo["t"], mo["h"]
+    clip = 2.5
+    top = [("Clean (AGC)", mo["clean"]), (f"Noisy\nSNR {mo['snr']['input']:.1f} dB", mo["noisy"])]
+    top += [(f"{m}\nSNR {mo['snr'][m]:.1f} dB", e) for m, e in mo["out"].items()]
+    fig, axs = plt.subplots(2, len(top), figsize=(2.05 * len(top), 6.6), sharex=True, sharey=True)
+    for j, (ttl, d) in enumerate(top):
+        _gather_km(axs[0, j], d, t, h, clip, ttl)
+        if j == 0:
+            axs[1, 0].axis("off")
+            continue
+        err = (mo["noisy"] if j == 1 else d) - mo["clean"]
+        _gather_km(axs[1, j], err, t, h, clip, "output − clean")
+    axs[0, 0].set_ylabel("Time (s)")
+    axs[1, 1].set_ylabel("Time (s)")
+    for ax in axs[0]:
+        ax.set_xlabel("")
+    fig.suptitle(f"Modelled shot gather with ground roll + Gaussian noise (σ = {mo['sigma']:g} × RMS), "
+                 f"Kalman Q = {mo['Q']:g}", y=1.0)
+    fig.savefig(path)
+    plt.close(fig)
+
+
+def fig_field(fd, path, tmax=2.0):
+    t, h = fd["t"], fd["h"]
+    sel = t <= tmax
+    clip = 2.5
+    names = ["Kalman", "Kalman RTS", "f-x decon", "Savitzky-Golay"]
+    fig, axs = plt.subplots(2, len(names) + 1, figsize=(2.3 * (len(names) + 1), 6.6), sharex=True, sharey=True)
+    _gather_km(axs[0, 0], fd["x"][sel], t[sel], h, clip, "Field record (AGC)")
+    axs[1, 0].axis("off")
+    for j, m in enumerate(names, start=1):
+        e = fd["out"][m][sel]
+        _gather_km(axs[0, j], e, t[sel], h, clip, m)
+        _gather_km(axs[1, j], fd["x"][sel] - e, t[sel], h, clip,
+                   f"removed: {100 * fd['removed_fraction'][m]:.0f}% of energy")
+    axs[0, 0].set_ylabel("Time (s)")
+    axs[1, 1].set_ylabel("Time (s)")
+    for ax in axs[0]:
+        ax.set_xlabel("")
+    fig.suptitle(f"Field record FFID 3043 (4 ms); Kalman Q = {fd['Q']:g}: K = {fd['K']:.3f}, "
+                 f"−3 dB at {fd['f3db_hz']:.1f} Hz", y=1.0)
+    fig.savefig(path)
+    plt.close(fig)
+
+
+def fig_field_spectra(fd, path):
+    fig, ax = plt.subplots(figsize=(6.5, 3.8))
+    f, A = amplitude_spectrum(fd["x"], fd["dt"])
+    ax.plot(f, A, color=MUTED, lw=1.4, label="Field record (AGC)")
+    for m in ("Kalman", "Kalman RTS", "f-x decon", "Savitzky-Golay"):
+        f, A = amplitude_spectrum(fd["out"][m], fd["dt"])
+        ax.plot(f, A, color=COLORS[m], lw=1.1, label=m)
+    ax.axvline(fd["f3db_hz"], color=COLORS["Kalman"], lw=0.8, ls="--")
+    ax.set_yscale("log")
+    ax.annotate(f"Kalman −3 dB: {fd['f3db_hz']:.1f} Hz", xy=(fd["f3db_hz"], 0.33), xycoords=("data", "axes fraction"),
+                xytext=(4, 0), textcoords="offset points", fontsize=7.5, color="#52514e")
+    ax.set_xlim(0, 0.5 / fd["dt"])
+    ax.set_xlabel("Frequency (Hz)")
+    ax.set_ylabel("Mean amplitude spectrum")
+    ax.set_title("Field record: amplitude spectra before and after denoising")
+    ax.legend(fontsize=8, ncol=2, loc="lower left")
+    fig.savefig(path)
+    plt.close(fig)

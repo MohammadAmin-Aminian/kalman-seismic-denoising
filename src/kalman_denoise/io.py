@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 from scipy.io import loadmat
 
-__all__ = ["repo_root", "load_config", "load_noise", "load_earthquake"]
+__all__ = ["repo_root", "load_config", "load_noise", "load_earthquake", "load_shot"]
 
 
 def repo_root():
@@ -47,3 +47,10 @@ def load_earthquake(rel_path):
         "station": str(m["station"]),
         "start_time": str(m["start_time"]),
     }
+
+
+def load_shot(rel_path):
+    """Shot gather stored as d[nt, ntraces] (single precision), offsets (m) and dt (s)."""
+    m = loadmat(_resolve(rel_path), squeeze_me=True)
+    return {"d": np.asarray(m["d"], dtype=float), "offset_m": np.atleast_1d(np.asarray(m["offset_m"], dtype=float)),
+            "dt_s": float(m["dt_s"]), "source": str(m["source"])}

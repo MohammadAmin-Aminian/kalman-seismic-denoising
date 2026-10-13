@@ -179,6 +179,53 @@ classdef TestKalmanDenoise < matlab.unittest.TestCase
             tc.verifyLessThan(max(abs(yh - tc.Ref.eq_y_main_head(:))) / max(abs(yh)), 1e-10);
         end
 
+        % ---------------------------------------------------- AGC and shot gathers
+        function agcNormalisesRms(tc)
+            t = (0:3999)' * 0.002;
+            x = exp(-t) .* sin(2 * pi * 15 * t) * 1e6;
+            y = agc_gain(x, agc_window_samples(0.2, 0.002));
+            r = sqrt(conv(y .^ 2, ones(101, 1) / 101, 'valid'));
+            tc.verifyLessThan(max(abs(r - 1)), 0.05);
+        end
+
+        function agcScaleInvariantAndZeros(tc)
+            s = RandStream('mt19937ar', 'Seed', 0);
+            d = randn(s, 500, 4);
+            d(1:100, :) = 0;
+            a = agc_gain(d, 51);
+            b = agc_gain(1e9 * d, 51);
+            tc.verifyLessThan(max(abs(a(:) - b(:))), 1e-12);
+            tc.verifyEqual(a(1:70, :), zeros(70, 4));
+            tc.verifyError(@() agc_gain(ones(10, 1), 4), 'agc_gain:badWindow');
+        end
+
+        function parityModelledShot(tc)
+            mo = run_modelled(tc.Cfg);
+            cols = double(tc.Ref.mod_cols(:))';
+            tc.verifyLessThan(max(abs(mo.clean(:, cols) - tc.Ref.mod_clean_cols), [], 'all'), 1e-10);
+            for i = 1:5
+                ref = tc.Ref.(sprintf('mod_out%d_cols', i));
+                err = max(abs(mo.out{i}(:, cols) - ref), [], 'all') / max(abs(ref), [], 'all');
+                tc.verifyLessThan(err, 1e-8, sprintf('method %d', i));
+            end
+            tc.verifyLessThan(max(abs(mo.snr - tc.Ref.mod_snr(:)')), 1e-6);
+            tc.verifyLessThan(max(abs(mo.sweep_forward - tc.Ref.mod_sweep_fwd(:)')), 1e-6);
+            tc.verifyLessThan(max(abs(mo.sweep_rts - tc.Ref.mod_sweep_rts(:)')), 1e-6);
+        end
+
+        function parityFieldRecord(tc)
+            fd = run_field(tc.Cfg);
+            cols = double(tc.Ref.field_cols(:))';
+            tc.verifyLessThan(max(abs(fd.x(:, cols) - tc.Ref.field_x_cols), [], 'all'), 1e-10);
+            for i = 1:5
+                ref = tc.Ref.(sprintf('field_out%d_cols', i));
+                err = max(abs(fd.out{i}(:, cols) - ref), [], 'all') / max(abs(ref), [], 'all');
+                tc.verifyLessThan(err, 1e-8, sprintf('method %d', i));
+            end
+            tc.verifyLessThan(max(abs(fd.removed - tc.Ref.field_removed(:)')), 1e-9);
+            tc.verifyLessThan(max(abs([fd.K, fd.f3db_hz] - tc.Ref.field_K_f3db(:)')), 1e-10);
+        end
+
         function reproduceAllRuns(tc)
             out = tempname;
             here = fileparts(mfilename('fullpath'));

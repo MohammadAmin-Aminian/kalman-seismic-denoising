@@ -49,5 +49,21 @@ ref["eq_K"] = np.array([eq["main"]["K"], eq["alt"]["K"]])
 ref["eq_f3db"] = np.array([eq["main"]["f3db_hz"], eq["alt"]["f3db_hz"]])
 ref["eq_rms_ratio"] = np.array([eq["main"]["rms_ratio"], eq["alt"]["rms_ratio"]])
 ref["eq_y_main_head"] = eq["main"]["y"][:2000]
+mo = P.run_modelled(cfg)
+mcols = np.array([0, 60, 119])
+ref["mod_cols"] = mcols + 1
+ref["mod_clean_cols"] = mo["clean"][:, mcols]
+ref["mod_snr"] = np.array([mo["snr"][k] for k in ("input",) + P.METHODS])
+ref["mod_sweep_fwd"], ref["mod_sweep_rts"] = mo["sweep_forward"], mo["sweep_rts"]
+for i, m in enumerate(P.METHODS):
+    ref[f"mod_out{i + 1}_cols"] = mo["out"][m][:, mcols]
+fd = P.run_field(cfg)
+fcols = np.array([0, 223, 446])
+ref["field_cols"] = fcols + 1
+ref["field_x_cols"] = fd["x"][:, fcols]
+ref["field_removed"] = np.array([fd["removed_fraction"][m] for m in P.METHODS])
+for i, m in enumerate(P.METHODS):
+    ref[f"field_out{i + 1}_cols"] = fd["out"][m][:, fcols]
+ref["field_K_f3db"] = np.array([fd["K"], fd["f3db_hz"]])
 savemat(ROOT / "tests" / "reference" / "python_reference.mat", ref, do_compression=True)
 print("wrote", ROOT / "tests" / "reference" / "python_reference.mat")

@@ -4,9 +4,10 @@ from __future__ import annotations
 import numpy as np
 
 from .baselines import fx_decon, savgol_filter, svd_denoise
-from .io import load_earthquake, load_noise
+from .io import load_earthquake, load_noise, load_shot
 from .kalman import cutoff_frequency, ewma_response, kalman1d, kalman_rts, steady_state
 from .metrics import snr_db, snr_db_original
+from .preprocessing import agc, agc_window_samples
 from .synthetic import chirp_signal, hyperbolic_gather
 
 METHODS = ("Savitzky-Golay", "f-x decon", "SVD", "Kalman", "Kalman RTS")
@@ -27,14 +28,15 @@ def analytic_signal(x):
     return np.fft.ifft(X * h)
 
 
-def denoise_all(noisy, cfg, Q=None):
-    """Apply every method with the configured parameters."""
-    s, k = cfg["synthetic"], cfg["kalman"]
+def denoise_all(noisy, cfg, Q=None, dt=None, fx=None):
+    """Apply every method with the configured parameters (dt, Q and f-x settings can be overridden)."""
+    k = cfg["kalman"]
     Q = k["Q"] if Q is None else Q
-    fx = cfg["fx"]
+    dt = cfg["synthetic"]["dt_s"] if dt is None else dt
+    fx = cfg["fx"] if fx is None else fx
     return {
         "Savitzky-Golay": savgol_filter(noisy, cfg["savgol"]["order"], cfg["savgol"]["frame"]),
-        "f-x decon": fx_decon(noisy, s["dt_s"], fx["operator_length"], fx["mu_percent"],
+        "f-x decon": fx_decon(noisy, dt, fx["operator_length"], fx["mu_percent"],
                               fx["fmin_hz"], fx["fmax_hz"]),
         "SVD": svd_denoise(noisy, cfg["svd"]["rank"]),
         "Kalman": kalman1d(noisy, Q, k["R"], k["P0"], k["x0"]),
@@ -103,3 +105,36 @@ def run_earthquake(cfg):
         res[name] = {"Q": Q, "y": y, "K": ss["K"], "f3db_hz": cutoff_frequency(ss["K"], dt),
                      "rms_ratio": float(np.sqrt(np.mean(y ** 2) / np.mean(x ** 2)))}
     return res
+
+
+def run_modelled(cfg):
+    """Modelled shot gather with ground roll: AGC, add Gaussian noise, denoise, score against the truth."""
+    m, k = cfg["modelled"], cfg["kalman"]
+    shot = load_shot(m["file"])
+    dt = shot["dt_s"]
+    clean = agc(shot["d"], agc_window_samples(m["agc_window_s"], dt))
+    rms = float(np.sqrt(np.mean(clean ** 2)))
+    noisy = clean + m["sigma"] * rms * load_noise(m["noise_file"])
+    out = denoise_all(noisy, cfg, Q=m["Q"], dt=dt, fx=m["fx"])
+    snr = {"input": snr_db(clean, noisy)}
+    snr.update({name: snr_db(clean, e) for name, e in out.items()})
+    sw = cfg["sweep"]
+    Qs = np.logspace(sw["log10_Q_min"], sw["log10_Q_max"], int(sw["n"]))
+    fwd = np.array([snr_db(clean, kalman1d(noisy, q, k["R"], k["P0"], k["x0"])) for q in Qs])
+    rts = np.array([snr_db(clean, kalman_rts(noisy, q, k["R"], k["P0"], k["x0"])) for q in Qs])
+    return {"t": np.arange(clean.shape[0]) * dt, "h": shot["offset_m"], "dt": dt, "clean": clean,
+            "noisy": noisy, "out": out, "snr": snr, "sweep_Q": Qs, "sweep_forward": fwd, "sweep_rts": rts,
+            "Q": m["Q"], "sigma": m["sigma"]}
+
+
+def run_field(cfg):
+    """Field record: AGC and denoising; no ground truth, so only removed energy is reported."""
+    f, k = cfg["field"], cfg["kalman"]
+    shot = load_shot(f["file"])
+    dt = shot["dt_s"]
+    x = agc(shot["d"], agc_window_samples(f["agc_window_s"], dt))
+    out = denoise_all(x, cfg, Q=f["Q"], dt=dt, fx=f["fx"])
+    removed = {name: float(np.sum((x - e) ** 2) / np.sum(x ** 2)) for name, e in out.items()}
+    ss = steady_state(f["Q"], k["R"])
+    return {"t": np.arange(x.shape[0]) * dt, "h": shot["offset_m"], "dt": dt, "x": x, "out": out,
+            "removed_fraction": removed, "K": ss["K"], "f3db_hz": cutoff_frequency(ss["K"], dt), "Q": f["Q"]}

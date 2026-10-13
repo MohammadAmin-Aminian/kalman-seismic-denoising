@@ -32,7 +32,10 @@ of the original code that keeps its bugs
 | B4 | `hyperbolic_events.m` (SeismicLab) | The "clean" gather contained extra band-limited random noise (`snr = 1000, L = 1000`, unseeded). It was also built in the frequency domain with a truncated wavelet. | The clean gather is now an exact sum of analytic Ricker wavelets: deterministic, and identical in both languages. | < 0.01 dB (Part A of the comparison). |
 | B5 | all scripts | `randn` was never seeded, so no run could be repeated exactly. | One noise field is drawn with a fixed seed and **stored** in `data/*.mat`. Python and MATLAB read the same numbers. | Exact reproducibility and cross-language parity. |
 | B6 | `kalman_22_sep.m` (chirp) | `chirp(t, f0, t1, f1)` used `f0` left over in the workspace, and `t1 = 0.05` s. The sweep therefore continued linearly to about 320 Hz while sampling at 100 Hz, so it was aliased. The noise was `0.8*rand`, which is uniform with mean 0.4, but labelled "Gaussian". | A properly sampled 1–120 Hz linear chirp at 500 Hz plus zero-mean Gaussian noise. It now serves as a known-answer test of the filter's frequency response. | New validation (Fig. 9). |
-| B7 | `kalman_Real_22_sep.m` | Uses `D1`, `D` and `dtsec` before they are defined, so the script can't run. | Not reproducible without the SEG-Y shots (see *Limitations*). | — |
+| B7 | `kalman_Real_22_sep.m` | Uses `D1`, `D` and `dtsec` before they are defined, so the script can't run. | Rewritten as `run_field`: AGC, then all methods on field record FFID 3043 of `shot1.sgy`. | Fig. 12–13. |
+| B10 | `Kalman_Real.m`, `kalman_Real_22_sep.m` | The f-x and f-k calls used `dt = 0.001` s for the 2 ms modelled shots and the 4 ms field record. They also used `dx = 12.5` m, while the modelled shots are 20 m and the field record 25 m. | Each dataset uses its own dt (from the SEG-Y header) and trace spacing. | Correct frequency bands. |
+| B11 | `shot20.sgy` | The modelled file is little-endian and its binary header declares format 1 (IBM float), but the samples are IEEE floats. Read as IBM, the values are meaningless (±3.6·10¹⁶). | `tools/segy.py` reads it as little-endian IEEE. | Data decoded correctly. |
+| B12 | `Kalman_Real.m` | The modelled shots are noise-free, so "denoising" them measured nothing. | Gaussian noise (0 dB, stored) is added to shot 20 after AGC, and every method is scored against the noise-free gather. | New benchmark (Fig. 11). |
 | B8 | `kalman_26_sep.m`, `random_noise_attenuation*.m` | SVD denoising kept 18 or 50 full-size rank-one images in memory (`Image(:,:,i)`) and summed them. | Direct truncated SVD `U(:,1:r) S V(:,1:r)'`. | Identical result, far less memory. |
 | B9 | `kalman_26_sep.m` | `VRE(xf, 2, 10)` ("Kalman + VRE") calls a function that isn't in the project. | Dropped (confirmed). | — |
 
@@ -45,6 +48,7 @@ of the original code that keeps its bugs
 | C3 | `fk_spectra`, `wiggle`, `agc`, `altreadsegy`, `ricker` (third-party) | `fk_spectrum`, image displays, analytic `ricker_wavelet` | Parity tests between Python and MATLAB. |
 | C4 | `chirp`, `hilbert`, `pspectrum`, `normalize` (Signal Processing Toolbox) | `chirp_signal`, `analytic_signal` (FFT), `amplitude_spectrum` | Unit tests. |
 | C5 | Hard-coded Windows paths (`C:\Users\…`) | Paths relative to the repository root and one JSON config | Runs anywhere. |
+| C6 | `agc(data,100,1,0)`, `altreadsegy` (third-party) | `agc` / `agc_gain`: centred RMS AGC, 100-sample window, shrinking at trace ends. `tools/segy.py` handles the one-off SEG-Y conversion. | Unit tests (RMS normalisation, scale invariance). The AGC definition is an assumption. |
 
 ## D. Choices that were ambiguous in the originals
 

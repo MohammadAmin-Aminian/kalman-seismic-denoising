@@ -8,14 +8,35 @@
     "offset_stop_m": 1000.0,
     "offset_step_m": 20.0,
     "mirror": true,
-    "tau_s": [0.5, 0.9, 1.5, 1.7, 2.0],
-    "v_mps": [800.0, 1200.0, 1600.0, 2000.0, 3000.0],
-    "amp": [3.0, 3.0, 3.0, 3.0, 3.0]
+    "tau_s": [
+      0.5,
+      0.9,
+      1.5,
+      1.7,
+      2.0
+    ],
+    "v_mps": [
+      800.0,
+      1200.0,
+      1600.0,
+      2000.0,
+      3000.0
+    ],
+    "amp": [
+      3.0,
+      3.0,
+      3.0,
+      3.0,
+      3.0
+    ]
   },
   "noise": {
     "file": "data/synthetic_noise.mat",
     "sigma_main": 0.04,
-    "sigma_levels": [0.04, 0.4]
+    "sigma_levels": [
+      0.04,
+      0.4
+    ]
   },
   "kalman": {
     "Q": 0.004,
@@ -59,5 +80,30 @@
     "Q_alt": 0.005,
     "R": 0.05,
     "fmax_hz": 5.0
+  },
+  "modelled": {
+    "file": "data/modelled_shot20.mat",
+    "noise_file": "data/modelled_noise.mat",
+    "agc_window_s": 0.2,
+    "sigma": 1.0,
+    "Q": 0.005,
+    "fx": {
+      "operator_length": 8,
+      "mu_percent": 0.0,
+      "fmin_hz": 0.0,
+      "fmax_hz": 100.0
+    },
+    "trace_index": 61
+  },
+  "field": {
+    "file": "data/field_shot_ffid3043.mat",
+    "agc_window_s": 0.4,
+    "Q": 0.005,
+    "fx": {
+      "operator_length": 15,
+      "mu_percent": 0.01,
+      "fmin_hz": 1.0,
+      "fmax_hz": 120.0
+    }
   }
 }
